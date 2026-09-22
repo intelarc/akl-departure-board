@@ -309,6 +309,10 @@ class Link:
                 time.sleep(0.06)
                 s.baudrate = self.FAST
                 s.timeout = 2
+                # bytes garbled by the speed change could pass for a "K"/"B":
+                # wait for the board's clean GO at the new speed first
+                if not self._wait(s, b"GO", 3):
+                    raise LinkError("board didn't switch speed")
                 s.reset_input_buffer()
                 self.ser, self.prev = s, None
                 print("board connected on", port)
@@ -325,7 +329,7 @@ class Link:
     def _wait(s, token, secs):
         end, seen = time.time() + secs, b""
         while time.time() < end:
-            seen = (seen + s.read(256))[-400:]
+            seen = (seen + s.read(max(1, s.in_waiting)))[-400:]   # return as soon as it's there
             if token in seen:
                 return True
         return False

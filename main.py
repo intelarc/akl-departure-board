@@ -7,8 +7,12 @@
 #     raw: w*h RGB565 pixels;  RLE: (count u8, RGB565 u16) runs
 #   board -> PC: "K" after each rectangle is on screen, "B" on BOOT button press
 # If the PC goes quiet the board resets itself (back to 115200, so mpremote
-# can reach it again).
-import sys, select, struct, time, machine, micropython
+# can reach it again). If the PC still hasn't come back after SLEEP_AFTER_MIN
+# minutes (it's been shut down), the screen goes off and the ESP32 deep-sleeps.
+# It wakes when the bridge next connects (it pulses the reset line) or when
+# BOOT is pressed.
+import sys, select, struct, time, machine, micropython, esp32
+import config as C
 from ui import tft, splash
 
 FAST = 230_400             # faster loses bytes: stdin is drained one char at a time
@@ -46,12 +50,21 @@ def unrle(src: ptr8, n: int, dst: ptr8, cap: int) -> int:
     return o
 
 
-def wait_hello():
+def wait_hello(timeout_ms):
     poll = select.poll()
     poll.register(sys.stdin, select.POLLIN)
-    while True:
+    start = time.ticks_ms()
+    while time.ticks_diff(time.ticks_ms(), start) < timeout_ms:
         if poll.poll(1000) and sys.stdin.readline().strip() == "HELLO":
-            return
+            return True
+    return False
+
+
+def deep_sleep():
+    print("no PC - sleeping")
+    tft.sleep()
+    esp32.wake_on_ext0(pin=btn, level=esp32.WAKEUP_ALL_LOW)   # BOOT button wakes it
+    machine.deepsleep()
 
 
 def serve():
@@ -75,6 +88,8 @@ def serve():
     mv = memoryview(buf)
     rle = bytearray(MAX_RLE)
     rmv = memoryview(rle)
+    time.sleep_ms(400)                  # let the driver's log drain; PC is switching too
+    out(b"\nGO\n")                      # ready: the PC waits for this before sending pixels
     last = time.ticks_ms()
     synced = False
     while True:
@@ -113,9 +128,11 @@ def serve():
         out(b"K")
 
 
-splash("Waiting for the PC...", "run: python bridge.py")
+sleep_min = getattr(C, "SLEEP_AFTER_MIN", 5)
+splash("Waiting for the PC...", "sleeping in %s min if the PC is off" % sleep_min)
 print("board ready")
-wait_hello()
+if not wait_hello(int(sleep_min * 60_000)):
+    deep_sleep()
 try:
     serve()
 finally:

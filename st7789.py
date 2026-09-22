@@ -58,6 +58,13 @@ class ST7789:
         self.rst(0); time.sleep_ms(20)
         self.rst(1); time.sleep_ms(150)
 
+    def sleep(self):
+        """Blank the panel and put the controller in low-power sleep."""
+        self.fill(0)
+        self._cmd(0x28)          # DISPOFF
+        self._cmd(0x10)          # SLPIN
+        time.sleep_ms(120)
+
     def _cmd(self, c, data=None):
         self.cs(0)
         self.dc(0)

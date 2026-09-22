@@ -15,6 +15,10 @@ LOCATION = "Hillsborough"     # top-left of the bus screen
 START_SCREEN = "bus"
 AUTO_SWITCH = 0               # seconds between automatic screen swaps; 0 = off
 
+# With the PC off/asleep, the board blanks and deep-sleeps after this long.
+# It wakes when bridge.py next connects, or when BOOT is pressed.
+SLEEP_AFTER_MIN = 5
+
 # USB port of the board; "" = find the CH340 automatically
 SERIAL_PORT = ""
 

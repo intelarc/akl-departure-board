@@ -80,6 +80,12 @@ time; a second one exits straight away.
 
 ## Notes
 
+- **When the PC turns off**, the board notices within 20 s and shows
+  "Waiting for the PC". After `SLEEP_AFTER_MIN` minutes (default 5) it blanks
+  the panel and deep-sleeps the ESP32. It wakes when `bridge.py` next connects
+  (the bridge pulses the reset line) or when BOOT is pressed. The GMT020-02
+  has no backlight pin, so the backlight itself stays on unless the PC cuts
+  USB power.
 - When nothing on screen changes, the PC resends one pixel every 5 s so the
   board knows it's still connected. The board resets itself 20 s after the PC stops sending, which puts it back
   at 115200 baud so mpremote can reach it.
