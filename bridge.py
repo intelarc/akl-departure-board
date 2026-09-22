@@ -5,14 +5,13 @@
 #   python bridge.py                  run the board (leave it going)
 #   python bridge.py --preview        just save bus.png + rail.png here
 #
-# Bus screen: the approach-lane UI from MSMGreen/at-departure-board (MIT,
-# vendored in atboard/). Rail screen: railview.py.
+# Bus screen: busview.py (bus sprites from MSMGreen/at-departure-board, MIT,
+# vendored in atboard/). Rail screen: railview.py, styled after AT's map.
 import json, math, struct, sys, threading, time, calendar, urllib.request, urllib.error
 import numpy as np
 import config as C
 import railview
-from atboard import render as atrender
-from atboard.model import Board, Watch, Departure
+import busview
 
 API = "https://api.at.govt.nz"
 FPS = 5
@@ -158,21 +157,19 @@ class StopWatch:
                 tr["delay"] = ev.get("delay", tu.get("delay", 0)) or 0
             tr["live"] = True
 
-    def watch(self):
+    def lane(self):
         now = time.time()
-        deps, badge, head = [], self.route or "", self.label
+        deps, route, head = [], self.route or "", self.label
         for v in sorted(self.trips.values(), key=lambda v: v["sched"] + v["delay"]):
             eta = v["sched"] + v["delay"] - now
             if v["gone"] or eta < -30:
                 continue
-            badge = badge or v["route"]
+            route = route or v["route"]
             head = head or v["headsign"]
-            deps.append(Departure(int(eta), live=v["live"], cancelled=v["cancel"]))
-        msg = None
-        if self.error and not self.trips:
-            msg = "no data"
-        return Watch(badge=(badge or "?")[:4], headsign=head or ("stop " + self.code),
-                     kind="bus", departures=deps[:3], message=msg)
+            deps.append((eta, v["live"], v["cancel"]))
+        msg = "no data" if self.error and not self.trips else None
+        return dict(route=(route or "?")[:4], headsign=head or ("stop " + self.code),
+                    deps=deps[:3], message=msg)
 
 
 # ---------- trains ----------
@@ -181,7 +178,21 @@ class Trains:
     # the 600KB all-vehicles feed into ~30KB
     def __init__(self):
         self.ids, self.t_disc, self.t = None, 0, 0
-        self.trains, self.counts, self.ok_at = [], None, 0
+        self.trains, self.counts, self.ok_at = {}, None, 0
+        self.before, self.t_moved = {}, 0
+
+    def positions(self, now):
+        """Each train glides from its last position to the new one."""
+        f = min(1.0, (now - self.t_moved) / (RAIL_EVERY * 0.8))
+        f = f * f * (3 - 2 * f)                         # ease in/out
+        out = {}
+        for vid, (x, y, li) in self.trains.items():
+            if vid in self.before and self.before[vid][2] == li:
+                bx, by, _ = self.before[vid]
+                if abs(bx - x) + abs(by - y) < 40:      # jumps (new trips) just appear
+                    x, y = bx + (x - bx) * f, by + (y - by) * f
+            out[vid] = (x, y, li)
+        return out
 
     def update(self):
         now = time.time()
@@ -196,7 +207,7 @@ class Trains:
                 self.t_disc = now
             else:
                 j = get("/realtime/legacy/vehiclelocations?vehicleid=" + self.ids)
-            trains = []
+            trains = {}
             for e in j["response"]["entity"] or []:
                 v = e.get("vehicle", {})
                 route = v.get("trip", {}).get("route_id", "").rsplit("-", 1)[0]
@@ -205,9 +216,11 @@ class Trains:
                     li = railview.LINE_IDS.index(route)
                     p = railview.place(li, pos["latitude"], pos["longitude"])
                     if p:
-                        trains.append((p[0], p[1], li))
-            self.trains = trains
-            self.counts = [sum(1 for t in trains if t[2] == i) for i in range(len(railview.LINES))]
+                        trains[e["id"]] = (p[0], p[1], li)
+            self.before = self.positions(now)       # glide from wherever they are now
+            self.trains, self.t_moved = trains, now
+            self.counts = [sum(1 for t in trains.values() if t[2] == i)
+                           for i in range(len(railview.LINES))]
             self.ok_at = now
         except Exception as e:
             print("trains:", e)
@@ -228,16 +241,16 @@ class Screens:
 
     def bus(self, t):
         now = time.time()
-        stale = int(now - min(s.ok_at for s in self.stops)) if all(s.ok_at for s in self.stops) else 0
-        b = Board(watches=[s.watch() for s in self.stops], clock=clock(), stale_s=stale,
-                  theme=getattr(C, "THEME", "transit"),
-                  location=getattr(C, "LOCATION", "Auckland"))
-        return atrender.render(b, t)
+        stale = all(s.ok_at for s in self.stops) and now - min(s.ok_at for s in self.stops) > 120
+        lt = local(now)
+        return busview.render(getattr(C, "LOCATION", "Auckland"), clock(),
+                              lt[3] + lt[4] / 60, [s.lane() for s in self.stops], t, stale)
 
     def rail(self, t):
         tr = self.trains
         stale = int(time.time() - tr.ok_at) if tr.ok_at else 0
-        return railview.render(tr.trains, tr.counts, clock(), stale)
+        return railview.render(list(tr.positions(time.time()).values()), tr.counts,
+                               clock(), stale, t)
 
 
 # ---------- USB link ----------
@@ -268,6 +281,7 @@ class Link:
         self.prev = None
         self.button = False
         self.sent = 0
+        self.last_tx = 0
 
     def connect(self):
         import serial, serial.tools.list_ports
@@ -352,6 +366,15 @@ class Link:
                 self.sent += len(data)
                 self._acks(True)
             i = j + 1
+        if len(rows) == 0 and time.time() - self.last_tx > 5:
+            # nothing changed for a while: resend one pixel so the board
+            # knows the PC is still here (it resets after 20s of silence)
+            self.ser.write(b"\xA5\x5A" + struct.pack(">BHHHHH", 0, 0, 0, 1, 1, 2)
+                           + px[0:1, 0:1].astype(">u2").tobytes())
+            self._acks(True)
+            self.last_tx = time.time()
+        elif len(rows):
+            self.last_tx = time.time()
         self._acks(False)
         self.prev = px
 

@@ -3,13 +3,19 @@
 An ESP32 with a 2.0" ST7789 colour display (GMT020-02, 320x240) showing live
 Auckland Transport data, driven by your PC over USB:
 
-- **Bus**: approach lanes where each bus slides toward the stop as it gets
-  closer. Default: the 27H both ways at Aldersgate Rd, Hillsborough (stops
-  8669 and 8664). The UI is from
+- **Bus** (`busview.py`): AT-styled cards, one per stop, each with a small
+  live scene. The bus slides toward the stop as it gets closer, clouds drift,
+  and the sky follows the real time of day (dawn, day, dusk, night with stars
+  and lit windows). The Britomart lane shows the city skyline and Sky Tower.
+  Default: the 27H both ways at Aldersgate Rd, Hillsborough (stops 8669 and
+  8664). The bus pixel art and lane idea come from
   [MSMGreen/at-departure-board](https://github.com/MSMGreen/at-departure-board)
   (MIT, vendored in `atboard/`).
-- **Rail**: a live map of the post-CRL network (E-W, S-C, O-W) in the style of
-  AT's network map, with every train drawn as a dot.
+- **Rail** (`railview.py`): a live map of the post-CRL network, drawn after
+  AT's official "Ngā Tereina" map. It has the red City Rail Link loop
+  (Waitematā, Te Waihorotiu, Karanga-a-Hape, Grafton, Newmarket, Parnell),
+  E-W and O-W running side by side out west, interchange pills, harbours and
+  volcanic cones. Every train is a dot that glides between position updates.
 
 Press **BOOT** on the ESP32 to switch screens.
 
@@ -51,14 +57,16 @@ after each rectangle (`B` when BOOT is pressed).
 | File | Where | What |
 |---|---|---|
 | `bridge.py` | PC | AT data, frame rendering, USB link |
+| `busview.py` | PC | the bus screen |
 | `railview.py` | PC | the rail map and GPS-to-map train placement |
-| `atboard/` | PC | bus-lane renderer from MSMGreen/at-departure-board (MIT) |
+| `atboard/` | PC | bus sprites + layout from MSMGreen/at-departure-board (MIT) |
 | `main.py`, `ui.py`, `st7789.py` | board | USB display |
 | `tools/stations.json` | PC | station coordinates from AT GTFS |
 
 ## Notes
 
-- The board resets itself 20 s after the PC stops sending, which puts it back
+- When nothing on screen changes, the PC resends one pixel every 5 s so the
+  board knows it's still connected. The board resets itself 20 s after the PC stops sending, which puts it back
   at 115200 baud so mpremote can reach it.
 - Links faster than 230400 baud drop bytes: MicroPython drains stdin one
   character at a time. MicroPython 1.29 also throws `ESP_ERR_INVALID_STATE`
