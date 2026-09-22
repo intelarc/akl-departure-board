@@ -1,21 +1,25 @@
 # AT Departure Board
 
-An ESP32 with a 2.0" ST7789 colour display (GMT020-02, 320x240) that shows:
+An ESP32 with a 2.0" ST7789 colour display (GMT020-02, 320x240) showing live
+Auckland Transport data, driven by your PC over USB:
 
-- **Bus**: live Auckland Transport departures for one stop (default **8669
-  Aldersgate Rd**, 27H to Britomart)
-- **Rail**: a live map of the post-CRL train network (E-W, S-C, O-W lines) with
-  every train drawn as a moving dot
+- **Bus**: approach lanes where each bus slides toward the stop as it gets
+  closer. Default: the 27H both ways at Aldersgate Rd, Hillsborough (stops
+  8669 and 8664). The UI is from
+  [MSMGreen/at-departure-board](https://github.com/MSMGreen/at-departure-board)
+  (MIT, vendored in `atboard/`).
+- **Rail**: a live map of the post-CRL network (E-W, S-C, O-W) in the style of
+  AT's network map, with every train drawn as a dot.
 
-Press the **BOOT** button to switch screens. Inspired by
-[MSMGreen/at-departure-board](https://github.com/MSMGreen/at-departure-board).
+Press **BOOT** on the ESP32 to switch screens.
 
 ## How it works
 
-The ESP32 doesn't use WiFi. `bridge.py` runs on the PC. It fetches from the AT
-API, works out the countdowns and train positions, and sends one JSON line per
-screen over the USB cable every 5 s. The board only draws, and it replies `ok`
-after each line so its small serial buffer never overflows.
+The ESP32 has no WiFi and does no fetching. It's a plain USB display.
+`bridge.py` on the PC fetches from the AT API, renders each 320x240 frame with
+Pillow, and sends only the changed rectangles, run-length encoded, at
+230400 baud. The board decodes them with a viper function and replies `K`
+after each rectangle (`B` when BOOT is pressed).
 
 ## Wiring
 
@@ -32,29 +36,31 @@ after each line so its small serial buffer never overflows.
 ## Setup
 
 1. Flash MicroPython (ESP32_GENERIC, v1.29) at 0x1000.
-2. `cp config.example.py config.py` and add your AT API key
-   (dev-portal.at.govt.nz, "GTFS" product) and stop code.
-3. Upload the board files:
+2. `cp config.example.py config.py`, then add your AT API key
+   (dev-portal.at.govt.nz, "GTFS" product) and your stops.
+3. Upload the board files (bridge.py must not be running):
 
-       python -m mpremote connect COM13 fs cp st7789.py :st7789.py + fs cp config.py :config.py + fs cp ui.py :ui.py + fs cp bus.py :bus.py + fs cp rail.py :rail.py + fs cp railmap.py :railmap.py + fs cp main.py :main.py + reset
+       python -m mpremote connect COM13 fs cp st7789.py :st7789.py + fs cp config.py :config.py + fs cp ui.py :ui.py + fs cp main.py :main.py + reset
 
-4. On the PC: `pip install pyserial`, then `python bridge.py` (leave it running).
+4. On the PC: `pip install pyserial pillow numpy`, then `python bridge.py`
+   and leave it running. `python bridge.py --preview` saves bus.png and
+   rail.png without the board.
 
 ## Files
 
 | File | Where | What |
 |---|---|---|
-| `bridge.py` | PC | AT API fetching, bus countdowns, snaps train GPS onto the map |
-| `main.py` | board | serial reader, BOOT-button screen switch |
-| `bus.py`, `rail.py`, `ui.py`, `st7789.py` | board | drawing |
-| `railmap.py` | both | generated map data (`python tools/gen_railmap.py`) |
-| `tools/preview.py` | PC | render a screen to PNG with live data, no hardware needed |
+| `bridge.py` | PC | AT data, frame rendering, USB link |
+| `railview.py` | PC | the rail map and GPS-to-map train placement |
+| `atboard/` | PC | bus-lane renderer from MSMGreen/at-departure-board (MIT) |
+| `main.py`, `ui.py`, `st7789.py` | board | USB display |
+| `tools/stations.json` | PC | station coordinates from AT GTFS |
 
 ## Notes
 
+- The board resets itself 20 s after the PC stops sending, which puts it back
+  at 115200 baud so mpremote can reach it.
+- Links faster than 230400 baud drop bytes: MicroPython drains stdin one
+  character at a time. MicroPython 1.29 also throws `ESP_ERR_INVALID_STATE`
+  when the REPL UART's baud is changed, but the change still takes effect.
 - SPI runs at 20 MHz. At 40 MHz, breadboard jumper wires corrupt long fills.
-- Trains are found by vehicle ID (all AT trains are 59xxx). That cuts the
-  600 KB all-vehicle feed down to about 30 KB.
-- Each train's GPS position is snapped to the nearest straight segment between
-  two stations on its line. Trains more than 1.5 km from their line (depots)
-  are hidden.
