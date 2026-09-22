@@ -60,6 +60,13 @@ after each rectangle (`B` when BOOT is pressed).
    and leave it running. `python bridge.py --preview` saves bus.png and
    rail.png without the board.
 
+## Start with Windows
+
+Put a shortcut in your Startup folder (`Win+R` → `shell:startup`) that runs
+`pythonw.exe bridge.py`, with the project folder as "Start in". `pythonw`
+runs it with no window and logs to `bridge.log`. Only one copy runs at a
+time; a second one exits straight away.
+
 ## Files
 
 | File | Where | What |

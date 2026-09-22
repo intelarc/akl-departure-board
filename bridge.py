@@ -446,7 +446,27 @@ def main():
         time.sleep(max(0, 1 / FPS - (time.time() - start)))
 
 
+def _single_instance():
+    """Hold a local port so a second copy (e.g. login autostart + a manual
+    run) exits instead of fighting over the USB port."""
+    import socket
+    s = socket.socket()
+    try:
+        s.bind(("127.0.0.1", 47813))
+    except OSError:
+        print("bridge.py is already running")
+        sys.exit(0)
+    return s
+
+
 if __name__ == "__main__":
+    import os
+    if sys.stdout is None:          # started with pythonw (no console): log to a file
+        log = open(os.path.join(os.path.dirname(os.path.abspath(__file__)), "bridge.log"),
+                   "a", buffering=1, encoding="utf-8")
+        sys.stdout = sys.stderr = log
+        print("---- started", time.strftime("%Y-%m-%d %H:%M:%S"))
+    lock = _single_instance() if "--preview" not in sys.argv else None
     try:
         main()
     except KeyboardInterrupt:
