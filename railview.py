@@ -369,23 +369,32 @@ def _legend(img, counts, stale):
     d.text((x0 + 15, y1 - 8), msg, font=font("arial.ttf", 8), fill=INK, anchor="lm")
 
 
+def _dot(col):
+    """A smooth train marker (navy rim, white ring, line colour), 13x13 RGBA."""
+    k = 8
+    big = Image.new("RGBA", (13 * k, 13 * k), (0, 0, 0, 0))
+    d = ImageDraw.Draw(big)
+    c = 6.5 * k
+    for r, fill in ((4.4, NAVY), (3.7, WHITE), (2.5, col)):
+        d.ellipse((c - r * k, c - r * k, c + r * k, c + r * k), fill=fill)
+    return big.resize((13, 13), Image.LANCZOS)
+
+
+_DOTS = [_dot(l[2]) for l in LINES]
+_legend_cache = {}
+
+
 def render(trains, counts, clock, stale_s=0, t=0.0):
     """trains: [(x, y, line)] positions on the map (see place())."""
-    img = static_map().copy()
-    _legend(img, counts, stale_s > 90)
-    # draw the train dots at 3x and paste them back smoothed
-    big = img.resize((W * 3, H * 3), Image.NEAREST)
-    d3 = ImageDraw.Draw(big)
+    key = (tuple(counts) if counts else None, stale_s > 90)
+    if key not in _legend_cache:
+        _legend_cache.clear()
+        base = static_map().copy()
+        _legend(base, counts, stale_s > 90)
+        _legend_cache[key] = base
+    img = _legend_cache[key].copy()
+    # whole-pixel positions: a dot only costs USB bandwidth when it really moves
     for x, y, li in sorted(trains, key=lambda tr: tr[2] == SC):
-        X, Y = x * 3, y * 3
-        d3.ellipse((X - 13, Y - 13, X + 13, Y + 13), fill=NAVY)
-        d3.ellipse((X - 11, Y - 11, X + 11, Y + 11), fill=WHITE)
-        d3.ellipse((X - 7.5, Y - 7.5, X + 7.5, Y + 7.5), fill=LINES[li][2])
-    small = big.resize((W, H), Image.LANCZOS)
-    mask = Image.new("L", (W, H), 0)
-    md = ImageDraw.Draw(mask)
-    for x, y, _ in trains:
-        md.ellipse((x - 6, y - 6, x + 6, y + 6), fill=255)
-    img.paste(small, (0, 0), mask)
+        img.paste(_DOTS[li], (int(round(x)) - 6, int(round(y)) - 6), _DOTS[li])
     _header(ImageDraw.Draw(img), clock)
     return img

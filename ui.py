@@ -23,8 +23,15 @@ tft = ST7789(spi, machine.Pin(C.PIN_CS), machine.Pin(C.PIN_DC),
 
 
 def splash(line1, line2=""):
-    tft.fill(BG)
-    tft.text("AT Departures", 56, 80, WHITE, BG, 2)
-    tft.text(line1[:40], 8, 130, GREY, BG)
+    # shown until the PC connects: AT-blue title bar, bus-stop roundel
+    page, blue = rgb(226, 236, 247), rgb(35, 94, 168)
+    tft.fill(page)
+    tft.fill_rect(0, 0, W, 30, blue)
+    tft.text("AT Departures", 8, 7, WHITE, blue, 2)
+    tft.fill_rect(150, 70, 20, 20, blue)          # stop sign
+    tft.fill_rect(146, 74, 28, 12, blue)
+    tft.fill_rect(154, 76, 12, 6, WHITE)
+    tft.fill_rect(159, 90, 2, 40, rgb(120, 128, 140))
+    tft.text(line1[:40], (W - len(line1[:40]) * 8) // 2, 150, rgb(26, 39, 68), page)
     if line2:
-        tft.text(line2[:40], 8, 146, GREY, BG)
+        tft.text(line2[:40], (W - len(line2[:40]) * 8) // 2, 166, rgb(86, 100, 126), page)

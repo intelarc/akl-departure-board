@@ -14,7 +14,7 @@ import railview
 import busview
 
 API = "https://api.at.govt.nz"
-FPS = 5
+FPS = 8
 BUS_SCHEDULE_EVERY = 300
 BUS_REALTIME_EVERY = 30
 RAIL_EVERY = 20
@@ -341,19 +341,44 @@ class Link:
             elif b == b"K" and need_k:
                 return
 
+    TW, TH = 16, 8          # change-detection tile size
+
+    @classmethod
+    def dirty_rects(cls, diff):
+        """Tight rectangles around the changed pixels, found per 16x8 tile so
+        two things moving on the same rows don't drag the whole width along."""
+        h, w = diff.shape
+        tiles = diff.reshape(h // cls.TH, cls.TH, w // cls.TW, cls.TW).any(axis=(1, 3))
+        spans = []                                  # (ty0, ty1, tx0, tx1) tile units
+        for ty in range(tiles.shape[0]):
+            cols = np.flatnonzero(tiles[ty])
+            k = 0
+            while k < len(cols):
+                m = k
+                while m + 1 < len(cols) and cols[m + 1] <= cols[m] + 2:   # bridge 1-tile gaps
+                    m += 1
+                run = (cols[k], cols[m] + 1)
+                for s in spans:                     # grow a span from the row above
+                    if s[1] == ty and (s[2], s[3]) == run:
+                        s[1] = ty + 1
+                        break
+                else:
+                    spans.append([ty, ty + 1, *run])
+                k = m + 1
+        rects = []
+        for ty0, ty1, tx0, tx1 in spans:
+            y0, y1, x0, x1 = ty0 * cls.TH, ty1 * cls.TH, tx0 * cls.TW, tx1 * cls.TW
+            sub = diff[y0:y1, x0:x1]
+            rows, cols = np.flatnonzero(sub.any(axis=1)), np.flatnonzero(sub.any(axis=0))
+            rects.append((x0 + cols[0], y0 + rows[0], x0 + cols[-1] + 1, y0 + rows[-1] + 1))
+        return rects
+
     def show(self, img):
         a = np.asarray(img.convert("RGB"), dtype=np.uint16)
         px = ((a[..., 0] >> 3) << 11) | ((a[..., 1] >> 2) << 5) | (a[..., 2] >> 3)
         diff = np.ones(px.shape, bool) if self.prev is None else px != self.prev
-        rows = np.flatnonzero(diff.any(axis=1))
-        i = 0
-        while i < len(rows):                        # runs of changed rows
-            j = i
-            while j + 1 < len(rows) and rows[j + 1] == rows[j] + 1:
-                j += 1
-            y0, y1 = rows[i], rows[j] + 1
-            cols = np.flatnonzero(diff[y0:y1].any(axis=0))
-            x0, x1 = cols[0], cols[-1] + 1
+        rects = self.dirty_rects(diff) if diff.any() else []
+        for x0, y0, x1, y1 in rects:
             step = max(1, self.MAX_PX // (x1 - x0))
             for y in range(y0, y1, step):
                 h = min(step, y1 - y)
@@ -365,7 +390,7 @@ class Link:
                     ">BHHHHH", kind, x0, y, x1 - x0, h, len(data)) + data)
                 self.sent += len(data)
                 self._acks(True)
-            i = j + 1
+        rows = rects
         if len(rows) == 0 and time.time() - self.last_tx > 5:
             # nothing changed for a while: resend one pixel so the board
             # knows the PC is still here (it resets after 20s of silence)
@@ -394,7 +419,7 @@ def main():
     cur = getattr(C, "START_SCREEN", "bus")
     link = Link()
     link.connect()
-    t0 = t_stat = time.time()
+    t0 = t_stat = switched = time.time()
     frames = 0
     while True:
         start = time.time()
@@ -402,9 +427,11 @@ def main():
             print("%s screen: %.1f fps, %.1f KB/s to the board"
                   % (cur, frames / (start - t_stat), link.sent / 1024 / (start - t_stat)))
             t_stat, frames, link.sent = start, 0, 0
-        if link.button:
+        auto = getattr(C, "AUTO_SWITCH", 0)
+        if link.button or (auto and start - switched >= auto):
             link.button = False
             cur = order[(order.index(cur) + 1) % len(order)]
+            switched = start
         try:
             img = screens.bus(start - t0) if cur == "bus" else screens.rail(start - t0)
             link.show(img)

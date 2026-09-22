@@ -10,10 +10,10 @@ WATCHES = [
     {"stop": "8664", "route": "27H", "label": ""},   # across the road, the other way
 ]
 LOCATION = "Hillsborough"     # top-left of the bus screen
-THEME = "transit"             # "transit" or "ghibli"
 
 # Screen at start-up: "bus" or "rail". The BOOT button on the ESP32 switches.
 START_SCREEN = "bus"
+AUTO_SWITCH = 0               # seconds between automatic screen swaps; 0 = off
 
 # USB port of the board; "" = find the CH340 automatically
 SERIAL_PORT = ""

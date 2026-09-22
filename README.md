@@ -1,7 +1,13 @@
 # AT Departure Board
 
 An ESP32 with a 2.0" ST7789 colour display (GMT020-02, 320x240) showing live
-Auckland Transport data, driven by your PC over USB:
+Auckland Transport data, driven by your PC over USB.
+
+| Bus stop (day) | Live train map |
+|---|---|
+| ![bus screen, daytime](docs/bus-day.png) | ![live post-CRL train map](docs/rail.png) |
+| **Dusk** | **Night** |
+| ![bus screen at dusk](docs/bus-dusk.png) | ![bus screen at night](docs/bus-night.png) |
 
 - **Bus** (`busview.py`): AT-styled cards, one per stop, each with a small
   live scene. The bus slides toward the stop as it gets closer, clouds drift,
@@ -17,14 +23,16 @@ Auckland Transport data, driven by your PC over USB:
   E-W and O-W running side by side out west, interchange pills, harbours and
   volcanic cones. Every train is a dot that glides between position updates.
 
-Press **BOOT** on the ESP32 to switch screens.
+Press **BOOT** on the ESP32 to switch screens, or set `AUTO_SWITCH` in
+`config.py` to swap them every N seconds.
 
 ## How it works
 
 The ESP32 has no WiFi and does no fetching. It's a plain USB display.
-`bridge.py` on the PC fetches from the AT API, renders each 320x240 frame with
-Pillow, and sends only the changed rectangles, run-length encoded, at
-230400 baud. The board decodes them with a viper function and replies `K`
+`bridge.py` on the PC fetches from the AT API and renders each 320x240 frame
+with Pillow at 8 fps. It finds what changed in 16x8 tiles and sends only
+those rectangles, run-length encoded, at 230400 baud. A typical animated
+frame costs well under 1 KB. The board decodes them with a viper function and replies `K`
 after each rectangle (`B` when BOOT is pressed).
 
 ## Wiring
@@ -72,3 +80,11 @@ after each rectangle (`B` when BOOT is pressed).
   character at a time. MicroPython 1.29 also throws `ESP_ERR_INVALID_STATE`
   when the REPL UART's baud is changed, but the change still takes effect.
 - SPI runs at 20 MHz. At 40 MHz, breadboard jumper wires corrupt long fills.
+
+## Licence
+
+MIT; see `LICENSE`. `atboard/` is from
+[MSMGreen/at-departure-board](https://github.com/MSMGreen/at-departure-board)
+under its own MIT licence (`atboard/LICENSE`). Data comes from the Auckland
+Transport developer API. This is an independent hobby project, not affiliated
+with Auckland Transport.
