@@ -75,7 +75,7 @@ class Lane:
         x0, y0, x1, y1 = box
         self.box, self.idx = box, idx
         self.row = (x0 + 8, y0 + 4, x1 - x0 - 16, 32)             # text row
-        sh = min(y1 - y0 - 44, 64)                                  # RAM caps the height
+        sh = min(y1 - y0 - 44, 56)                                  # must fit the 33KB pool
         self.scene = (x0 + 6, y1 - 6 - sh, x1 - x0 - 12, sh)        # scene box
         self.key = None
         self.plan = None

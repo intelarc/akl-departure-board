@@ -29,7 +29,7 @@ NAVY, INK = rgb(26, 39, 68), rgb(86, 100, 126)
 SLEEP_MIN = getattr(C, "SLEEP_AFTER_MIN", 5)
 
 gc.collect()
-pool = bytearray(38 * 1024)                    # shared drawing canvas
+pool = bytearray(33 * 1024)                    # shared drawing canvas (a bus scene is 32.4KB)
 fonts = {n: gfx.Font("assets/%s.fnt" % n)
          for n in ("big", "clock", "title", "head", "small", "smallb")}
 
@@ -51,15 +51,15 @@ def splash(line1, line2=""):
     cv.fill(AT_BLUE)
     cv.text(fonts["title"], "AT Departures", 10, 8, 0xFFFF)
     tft.blit(cv.buf, 0, 0, 320, 30)
-    cv = gfx.Canvas(memoryview(pool)[:300 * 60 * 2], 300, 60)
+    cv = gfx.Canvas(memoryview(pool)[:280 * 58 * 2], 280, 58)   # fits in the pool
     cv.fill(PAGE)
-    cv.ellipse(150, 12, 11, 11, 0xFFFF)          # an AT stop roundel
-    cv.ellipse(150, 12, 9, 9, AT_BLUE)
-    cv.rect(145, 9, 10, 5, 0xFFFF)
+    cv.ellipse(140, 12, 11, 11, 0xFFFF)          # an AT stop roundel
+    cv.ellipse(140, 12, 9, 9, AT_BLUE)
+    cv.rect(135, 9, 10, 5, 0xFFFF)
     for i, (s, f, c) in enumerate(((line1, fonts["head"], NAVY), (line2, fonts["small"], INK))):
         if s:
-            cv.text(f, s, (300 - f.width(s)) // 2, 30 + i * 16, c)
-    tft.blit(cv.buf, 10, 95, 300, 60)
+            cv.text(f, s, (280 - f.width(s)) // 2, 30 + i * 16, c)
+    tft.blit(cv.buf, 20, 95, 280, 58)
 
 
 def deep_sleep():

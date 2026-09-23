@@ -1,6 +1,6 @@
 # Auckland Transport data, fetched and worked out on the board itself.
 # The PC (netproxy.py) only relays the HTTP requests.
-import time, re, json, gc, math
+import time, json, gc, math
 import net
 import railgeo as G
 import config as C
@@ -182,7 +182,6 @@ class Stop:
 
 
 # ---------- trains ----------
-_TOKEN = re.compile(b'"(id|route_id|latitude|longitude)": ?"?([-0-9A-Za-z.]+)')
 _KX = math.cos(math.radians(36.9))
 
 # per line: [(polyline, cumulative lengths, total, ax, ay, dx, dy, L2)]
@@ -223,41 +222,52 @@ def place(li, lat, lon):
     return poly[-1]
 
 
+_KEYS = (b'"id":', b'"route_id":', b'"latitude":', b'"longitude":')
+
+
 class _Scanner:
-    # pulls (vehicle, route, lat, lon) out of the feed as it streams in, so
-    # the ~30KB of JSON never has to sit in RAM
+    # Pulls (vehicle, route, lat, lon) out of the feed as it streams in, so
+    # the ~15-30KB of JSON never sits in RAM. It walks each chunk by index:
+    # one allocation per chunk plus tiny value slices -- copying the rest of
+    # the buffer after every value (the old way) fragmented the heap until
+    # updates failed.
     def __init__(self):
-        self.buf = b""
+        self.tail = b""
         self.vid = self.route = self.lat = None
         self.out = []
 
     def feed(self, chunk):
-        buf = self.buf + bytes(chunk)
+        data = self.tail + bytes(chunk)
+        pos, n = 0, len(data)
         while True:
-            m = _TOKEN.search(buf)
-            if not m:
-                buf = buf[-48:]
+            at, which = -1, -1
+            for k in range(4):                       # the next key of any kind
+                i = data.find(_KEYS[k], pos)
+                if i >= 0 and (at < 0 or i < at):
+                    at, which = i, k
+            if at < 0:
+                pos = max(pos, n - 16)               # keep a possible half key
                 break
-            tok = m.group(0)
-            at = buf.find(tok)
-            end = at + len(tok)
-            if end >= len(buf) - 1:            # value may be cut off: wait for more
-                buf = buf[at:]
+            vs = at + len(_KEYS[which])
+            e1, e2 = data.find(b",", vs), data.find(b"}", vs)
+            ve = e1 if e2 < 0 or (0 <= e1 < e2) else e2
+            if ve < 0:
+                pos = at                             # value not complete yet
                 break
-            k, v = m.group(1), m.group(2)
-            if k == b"id":
-                if self.lat is None:           # the entity's own id comes first
+            v = data[vs:ve].strip().strip(b'"')
+            if which == 0:
+                if self.lat is None:                 # the entity's own id comes first
                     self.vid = v
-            elif k == b"route_id":
+            elif which == 1:
                 self.route = v
-            elif k == b"latitude":
+            elif which == 2:
                 self.lat = float(v)
             else:
                 if self.route and self.lat is not None:
                     self.out.append((self.vid, self.route, self.lat, float(v)))
                 self.route = self.lat = None
-            buf = buf[end:]
-        self.buf = buf
+            pos = ve
+        self.tail = data[pos:]
 
 
 class Trains:

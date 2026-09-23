@@ -21,6 +21,9 @@ _rd = sys.stdin.buffer.readinto
 _wr = sys.stdout.buffer.write
 _id = 0
 idle = None                     # called while waiting, e.g. to draw a frame
+# set aside once, early, while the heap is still in one piece
+_body = bytearray(8 * 1024)     # the biggest timetable seen is 6.4KB
+_chunk = bytearray(CHUNK)
 last_ok = time.ticks_ms()       # last time the PC answered (the board sleeps if it stops)
 
 
@@ -98,17 +101,24 @@ def request(url, on_chunk=None):
     rid = _send("GET", url)
     st, n = _reply(rid, 30000, True)
     if on_chunk is None:
-        gc.collect()
-        body = bytearray(n)
+        # bodies land in one buffer set aside at start-up, so a 6KB timetable
+        # never needs a fresh 6KB block from a fragmented heap
+        if n > len(_body):
+            gc.collect()
+            body = bytearray(n)
+        else:
+            body = _body
         pos = [0]
 
         def into(b):
             body[pos[0]:pos[0] + len(b)] = b
             pos[0] += len(b)
-        _pull(rid, n, into, bytearray(min(CHUNK, max(n, 1))))
+        _pull(rid, n, into, _chunk)
         last_ok = time.ticks_ms()
-        return st, body              # a bytearray: json.loads takes it without a copy
-    _pull(rid, n, on_chunk, bytearray(CHUNK))
+        # a view onto the buffer: json.loads takes it without a copy. Valid
+        # until the next request, which is all the callers need.
+        return st, memoryview(body)[:n]
+    _pull(rid, n, on_chunk, _chunk)
     last_ok = time.ticks_ms()
     return st, n
 
