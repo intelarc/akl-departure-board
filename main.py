@@ -1,6 +1,7 @@
 # AT departure board -- everything runs here on the ESP32: fetching, parsing,
-# placing trains and drawing. The PC is only the internet connection
-# (netproxy.py relays HTTP over the USB cable, since the house WiFi is weak).
+# placing trains and drawing. The 2.4 GHz WiFi in the house doesn't reach
+# the board, so it goes online over USB instead: the PC is only its internet
+# connection (netproxy.py relays HTTP over the cable).
 #
 # BOOT button: switch between the bus stop and the live train map.
 # No PC for SLEEP_AFTER_MIN minutes: screen off, deep sleep. netproxy.py

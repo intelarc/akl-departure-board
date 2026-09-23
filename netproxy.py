@@ -1,4 +1,5 @@
-# The PC's only job: be the ESP32's internet connection over USB.
+# The PC's only job: be the ESP32's internet connection over USB. The 2.4 GHz
+# WiFi in the house doesn't reach the board, so it uses the USB cable instead.
 #
 #   python netproxy.py            (leave it running; Ctrl+C to stop)
 #   python netproxy.py -v         also log every line the board sends

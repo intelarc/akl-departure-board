@@ -5,9 +5,13 @@ network on an ESP32 with a 2.0" ST7789 colour display (GMT020-02, 320x240).
 
 **The ESP32 does all the work**: it fetches from the AT API, parses the
 responses, works out countdowns, snaps every train's GPS position onto the
-map, and draws both screens. The PC is only its internet connection:
-`netproxy.py` relays HTTP requests over the USB cable, for houses where the
-2.4 GHz WiFi doesn't reach.
+map, and draws both screens.
+
+**Why USB instead of WiFi:** the ESP32 only has 2.4 GHz WiFi, and the
+2.4 GHz WiFi in my house doesn't reach where the board sits. So I used USB:
+the PC acts as the board's internet connection and nothing more.
+`netproxy.py` relays HTTP requests over the USB cable. All the logic and
+drawing stays on the ESP32.
 
 | Bus stop (day) | Live train map |
 |---|---|
@@ -104,8 +108,10 @@ with no window, logs to `netproxy.log`, and only one copy runs at a time.
   batches of 200, because a single 1000-id URL is a 6 KB string the
   fragmented heap can't hold.
 - SPI runs at 20 MHz. At 40 MHz, breadboard jumper wires corrupt long fills.
-- The screenshots in `docs/` are PC renders of the same design. The board
-  draws them itself.
+- The screenshots in `docs/` come from `tools/emulate.py`, which runs the
+  board's own drawing code on the PC with live AT data. The panel is
+  write-only, so it can't be read back. They show exactly what the ESP32
+  draws. Run it to preview changes without the hardware.
 
 ## Licence
 

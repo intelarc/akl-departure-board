@@ -77,12 +77,14 @@ class RailScreen:
     def _legend(self, counts, stale):
         x0, y0, x1, y1 = LEG
         f = self.f["smallb"]
-        cv = gfx.Canvas(memoryview(self.pool)[:24 * 40 * 2], 24, 40)
+        # stays clear of the card's rounded corner (radius 6)
+        cv = gfx.Canvas(memoryview(self.pool)[:20 * 40 * 2], 20, 40)
         cv.fill(0xFFFF)
         for i, li in enumerate((1, 0, 2)):          # S-C, E-W, O-W, as baked
             n = "-" if counts is None else str(counts[li])
-            cv.text(f, n, 22 - f.width(n), 3 + i * 13 - 5, NAVY)
-        self.tft.blit(cv.buf, x1 - 26, y0 + 1, 24, 40)
+            # centred on the baked rows at y0 + 9 + 13i
+            cv.text(f, n, 18 - f.width(n), 8 + i * 13 - f.h // 2, NAVY)
+        self.tft.blit(cv.buf, x1 - 26, y0 + 1, 20, 40)
         cv = gfx.Canvas(memoryview(self.pool)[:110 * 12 * 2], 110, 12)
         cv.fill(0xFFFF)
         cv.ellipse(3, 6, 2, 2, WARN if stale else LIVE)

@@ -146,7 +146,7 @@ class Lane:
             fb.pixel(x, y, 0xFFFF)
         if nt:
             cv.ellipse(sw - 55, 10, 5, 5, rgb(250, 244, 220))
-            cv.ellipse(sw - 52, 9, 5, 5, rgb(*top))
+            cv.ellipse(sw - 52, 9, 5, 5, top)          # crescent: cut with the sky colour
         else:
             for k in range(3):                       # drifting clouds
                 span = sw + 30
